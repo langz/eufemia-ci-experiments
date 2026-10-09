@@ -1,0 +1,31 @@
+name: CI
+
+# E1: "Run lint" is skipped on same-repo PRs but keeps its name (naive gate).
+# E2: "Run types" is skipped on same-repo PRs under a different name.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Run lint
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: test ! -f FAIL_LINT
+
+  types:
+    name: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.fork) && 'Run types' || 'Run types (fork PRs only)' }}
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: test ! -f FAIL_TYPES

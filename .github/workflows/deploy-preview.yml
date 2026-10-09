@@ -1,0 +1,108 @@
+name: Deploy Fork Preview
+
+# Trusted half: always runs the default branch's version of this file, has
+# secrets, and never executes anything from the artifact.
+on:
+  workflow_run:
+    workflows: [Build Preview]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy fork preview
+    # Experiment: same-repo PRs are allowed here; the real version requires
+    # github.event.workflow_run.head_repository.fork.
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - name: Show trigger facts
+        env:
+          RUN_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          IS_FORK: ${{ github.event.workflow_run.head_repository.fork }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          REF: ${{ github.ref }}
+        run: |
+          echo "workflow_run.pull_requests=$RUN_PRS"
+          echo "head_repository=$HEAD_REPO fork=$IS_FORK"
+          echo "this workflow file comes from ref=$REF sha=$WORKFLOW_SHA"
+          echo "MARKER: trusted default-branch version"
+
+      - name: Resolve pull request from the API
+        id: pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        with:
+          script: |
+            const { HEAD_SHA, HEAD_REPO } = process.env
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            })
+            const pr = pulls.find(
+              (p) => p.head.sha === HEAD_SHA && p.head.repo?.full_name === HEAD_REPO
+            )
+            if (!pr) {
+              core.notice(`No open pull request has head ${HEAD_SHA}; skipping.`)
+              return
+            }
+            core.setOutput('number', String(pr.number))
+            core.setOutput('sha', HEAD_SHA)
+
+      - name: Download preview artifact
+        if: steps.pr.outputs.number
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: portal-preview
+          path: ${{ runner.temp }}/preview
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Strip Cloudflare server-side and config files
+        if: steps.pr.outputs.number
+        working-directory: ${{ runner.temp }}/preview
+        run: |
+          echo "Before:"; find . -maxdepth 2 | sort
+          rm -rf -- _worker.js _routes.json _headers _redirects functions
+          find . -type l -print -delete
+          echo "After:"; find . -maxdepth 2 | sort
+
+      - name: Deploy (dry run)
+        if: steps.pr.outputs.number
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+        run: echo "wrangler pages deploy $RUNNER_TEMP/preview --branch pr-$PR_NUMBER --commit-hash $HEAD_SHA"
+
+      - name: Report on the pull request
+        if: steps.pr.outputs.number
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.sha }}
+        with:
+          script: |
+            const issue_number = Number(process.env.PR_NUMBER)
+            const url = `https://pr-${issue_number}.example.pages.dev`
+            await github.rest.repos.createCommitStatus({
+              ...context.repo,
+              sha: process.env.HEAD_SHA,
+              state: 'success',
+              context: 'Fork preview',
+              target_url: url,
+              description: 'Preview deployed',
+            })
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body: `<!-- fork-preview -->\nPreview: ${url}`,
+            })
