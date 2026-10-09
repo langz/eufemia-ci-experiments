@@ -1,5 +1,7 @@
 name: Dispatch test
 on:
+  push:
+    branches: [exp/dispatch]
   workflow_dispatch:
     inputs:
       run_id:
