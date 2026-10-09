@@ -32,7 +32,7 @@ jobs:
           echo "workflow_run.pull_requests=$RUN_PRS"
           echo "head_repository=$HEAD_REPO fork=$IS_FORK"
           echo "this workflow file comes from ref=$REF sha=$WORKFLOW_SHA"
-          echo "MARKER: trusted default-branch version"
+          echo "MARKER: PR version (must never run)"
 
       - name: Resolve pull request from the API
         id: pr
