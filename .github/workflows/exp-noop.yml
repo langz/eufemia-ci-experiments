@@ -1,0 +1,12 @@
+name: Exp noop
+
+on:
+  workflow_call:
+
+jobs:
+  skip:
+    name: Skip
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 0

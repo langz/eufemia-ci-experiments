@@ -1,0 +1,17 @@
+name: Exp Target PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  work:
+    name: Target PR work
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: sleep 900
