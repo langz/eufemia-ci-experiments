@@ -1,0 +1,39 @@
+name: Cancel merged PR runs
+
+# Cancels a merged pull request's queued and running CI at once by joining each run's concurrency group.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  cancel:
+    name: ${{ matrix.label || matrix.workflow }}
+
+    # Same-repo branches only, never long-lived ones (the release pull request's head is main).
+    if: >-
+      github.event.pull_request.merged &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJSON('["main","release","beta","alpha","next"]'), github.head_ref) &&
+      !endsWith(github.head_ref, '.x')
+
+    strategy:
+      matrix:
+        # Must match each workflow's name and concurrency group: {0} is the branch, {1} the pull request number.
+        include:
+          - workflow: Exp Target Push
+            ref: 'refs/heads/{0}'
+          - workflow: Exp Target PR
+            ref: '{1}'
+            label: Exp Target PR (pull request)
+          - workflow: Exp Target Merge
+            ref: 'refs/pull/{1}/merge'
+
+    concurrency:
+      group: ${{ matrix.workflow }}-${{ format(matrix.ref, github.head_ref, github.event.pull_request.number) }}
+      cancel-in-progress: true
+
+    # Its only job is skipped, so no runner is needed.
+    uses: ./.github/workflows/noop.yml

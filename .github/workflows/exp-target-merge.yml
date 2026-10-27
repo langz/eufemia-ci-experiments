@@ -1,0 +1,17 @@
+name: Exp Target Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  work:
+    name: Target merge-ref work
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: sleep 900
