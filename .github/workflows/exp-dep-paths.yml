@@ -1,0 +1,16 @@
+name: Exp Dep Paths
+
+on:
+  pull_request:
+    branches: [exp5/base]
+    paths: ['dep.lock']
+  push:
+    branches: ['exp5/**', '!exp5/base']
+    paths: ['dep.lock']
+
+jobs:
+  report:
+    name: Report ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${{ github.event_name }}"
